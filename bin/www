@@ -1,0 +1,160 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('unidad3-r2:server');
+var http = require('http');
+const IOT = require("../models/temperatura_humedad.js");
+
+const mosca = require('mosca');
+const aedes = require("aedes");
+const pub = require("../pub");
+const sub = require("../sub");
+
+// ######################   MQTT ###########################################
+
+// Creamos nuestro servidos broker con ayuda de mosca 
+const broker = new mosca.Server({
+  // especificamos el puerto del servidor
+  port:9001
+});
+
+// creamos un escucha de un evento con la palabra on 
+// ready es un evente en donde informa que el servidor ya esta levantado
+broker.on("ready",(err,result)=>{
+  if (err) {
+      console.log("A ocurrido un error");
+      console.log(err.message);
+  } else {
+      console.log("Servidor Broker escuchando en el puerto 9001");
+  }
+
+});
+
+// el evento clientConnected avisa cuando se conecta un nuevo cliente 
+// sucriptor/publicador
+broker.on("clientConnected",(client)=>{
+  // el parametro client contiene la informacion del cliente 
+  console.log("Nuevo cliente "+client.id)
+});
+
+// cuando el broker resive un nuevo mensaje de un publicador para mandarlo a los suscriptores interesados 
+broker.on("published",(packet)=>{
+  // packet almacena la informacion del mensaje 
+  // payload es el mensaje en si
+  // console.log(packet.payload.toString());
+})
+
+// #######################################################################
+
+
+// #########          WEBSOCKET            #############
+const WebSocket = require('ws');
+const WS_PORT  = 8888;
+
+// Creamos nuestro servidor websocket 
+const wsServer = new WebSocket.Server({port: WS_PORT}, ()=> console.log(`WS Server is listening at ${WS_PORT}`));
+
+// Almacena los clientes conectados 
+let connectedClients = [];
+// Al conectarse un cliente nuevo 
+wsServer.on('connection', (ws, req)=>{
+  // imprimira la siguiente leyenda en consola 
+    console.log('Connected cliente 1');
+    // Agrega el cliente en el arreglo 
+    connectedClients.push(ws);
+// Al recibir un mensaje 
+    ws.on('message', data => {
+      // leera el mesaje, y como es un mensaje en binario es necesario recorrer el bufer 
+        connectedClients.forEach((ws,i)=>{
+            if(ws.readyState === ws.OPEN){
+                ws.send(data);
+            }else{
+                connectedClients.splice(i ,1);
+            }
+        })
+    });
+});
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
